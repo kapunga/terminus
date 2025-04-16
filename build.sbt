@@ -72,7 +72,7 @@ lazy val commonSettings = Seq(
   )
 )
 
-lazy val root = tlCrossRootProject.aggregate(core, unidocs)
+lazy val root = tlCrossRootProject.aggregate(core, effect, unidocs)
 
 lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("core"))
@@ -82,6 +82,19 @@ lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Dependencies.catsCore.value
     ),
     name := "terminus-core"
+  )
+  .jvmSettings(libraryDependencies += Dependencies.jline.value)
+  .jsSettings(libraryDependencies += Dependencies.scalajsDom.value)
+
+lazy val effect = crossProject(JSPlatform, JVMPlatform)
+  .in(file("effect"))
+  .settings(
+    commonSettings,
+    libraryDependencies ++= Seq(
+      Dependencies.catsCore.value,
+      Dependencies.catsEffect.value,
+    ),
+    name := "terminus-effect"
   )
   .jvmSettings(libraryDependencies += Dependencies.jline.value)
   .jsSettings(libraryDependencies += Dependencies.scalajsDom.value)
@@ -170,10 +183,10 @@ lazy val examples = crossProject(JSPlatform, JVMPlatform)
   )
   .jvmConfigure(
     _.settings(mimaPreviousArtifacts := Set.empty)
-      .dependsOn(core.jvm)
+      .dependsOn(core.jvm, effect.jvm)
   )
   .jsConfigure(
     _.settings(mimaPreviousArtifacts := Set.empty)
-      .dependsOn(core.js)
+      .dependsOn(core.js, effect.js)
   )
-  .dependsOn(core)
+  .dependsOn(core, effect)
