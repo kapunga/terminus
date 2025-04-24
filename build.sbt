@@ -93,11 +93,12 @@ lazy val effect = crossProject(JSPlatform, JVMPlatform)
     libraryDependencies ++= Seq(
       Dependencies.catsCore.value,
       Dependencies.catsEffect.value,
+      Dependencies.fs2.value,
+      Dependencies.fs2Io.value
     ),
     name := "terminus-effect"
   )
-  .jvmSettings(libraryDependencies += Dependencies.jline.value)
-  .jsSettings(libraryDependencies += Dependencies.scalajsDom.value)
+  .dependsOn(core)
 
 lazy val docs =
   project

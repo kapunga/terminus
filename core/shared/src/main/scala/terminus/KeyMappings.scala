@@ -23,9 +23,19 @@ class KeySequence(val root: Key, val sequences: Map[String, Key]):
     * partially matched a sequence
     */
   val subSequences: Set[String] = sequences.keySet.flatMap(s =>
-    if s.length <= 2 then Set.empty
-    else (2 until s.length).map(s.substring(0, _)).toSet
+    if s.isEmpty then Set.empty
+    else (1 until s.length).map(s.substring(0, _)).toSet
   )
+
+  def isKeySequence(s: String): IsKeySequence =
+    if sequences.contains(s) then IsKeySequence.Yes(sequences(s))
+    else if subSequences.contains(s) then IsKeySequence.Maybe
+    else IsKeySequence.No
+
+enum IsKeySequence:
+  case No extends IsKeySequence
+  case Maybe extends IsKeySequence
+  case Yes(key: Key) extends IsKeySequence
 
 object KeyMappings:
   lazy val default: Map[Char, Key | KeySequence] = Map(

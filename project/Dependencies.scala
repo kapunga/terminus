@@ -25,6 +25,7 @@ object Dependencies {
   val catsCore = Def.setting("org.typelevel" %%% "cats-core" % catsVersion)
   val catsFree = Def.setting("org.typelevel" %%% "cats-free" % catsVersion)
   val fs2 = Def.setting("co.fs2" %%% "fs2-core" % fs2Version)
+  val fs2Io = Def.setting("co.fs2" %%% "fs2-io" % fs2Version)
 
   val scalatags = Def.setting("com.lihaoyi" %%% "scalatags" % scalatagsVersion)
   val scalajsDom =
