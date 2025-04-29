@@ -16,26 +16,23 @@
 
 package terminus
 
-import cats.effect.{MonadCancel, Resource}
+import cats.effect.{Resource, Sync}
 import scala.language.postfixOps
 
 extension (terminal: Terminal)
-  def inAlternateScreenMode[A, F[_]](fa: F[A])(using
-      mc: MonadCancel[F, Throwable]
-  ): F[A] =
-    inMode(_.setAlternateScreenMode())(fa)
+  def inAlternateScreenMode[F[_]: Sync]: Resource[F, Unit] = inMode(
+    _.setAlternateScreenMode()
+  )
 
-  def inApplicationMode[A, F[_]](fa: F[A])(using
-      mc: MonadCancel[F, Throwable]
-  ): F[A] =
-    inMode(_.setApplicationMode())(fa)
+  def inApplicationMode[F[_]: Sync]: Resource[F, Unit] = inMode(
+    _.setApplicationMode()
+  )
 
-  def inRawMode[A, F[_]](fa: F[A])(using mc: MonadCancel[F, Throwable]): F[A] =
-    inMode(_.setRawMode())(fa)
+  def inRawMode[F[_]: Sync]: Resource[F, Unit] = inMode(_.setRawMode())
 
-  private def inMode[A, F[_]](
+  private def inMode[F[_]](
       setMode: Terminal => () => Unit
-  )(fa: F[A])(using mc: MonadCancel[F, Throwable]): F[A] =
+  )(using mc: Sync[F]): Resource[F, Unit] =
     Resource
-      .make(mc.pure(setMode(terminal)))(revert => mc.pure(revert()))
-      .use(_ => fa)
+      .make(Sync[F].delay(setMode(terminal)))(r => mc.delay(r()))
+      .map(_ => ())

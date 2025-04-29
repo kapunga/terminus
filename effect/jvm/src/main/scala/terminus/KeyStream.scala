@@ -16,41 +16,50 @@
 
 package terminus
 
-import cats.data.NonEmptyList
 import cats.effect.{Async, Clock}
 import fs2.{Chunk, Pull, Stream}
 import java.time.Instant
 import scala.language.postfixOps
 
 object KeyStream:
+  private def stringToCharPipe[F[_]](s: Stream[F, String]): Stream[F, Char] =
+    s.flatMap(s => Stream.emits(s.toList))
+
+  private def toKeyPipe[F[_]: Async](
+      inputStream: Stream[F, Char]
+  ): Stream[F, Key] =
+    toKeyPull(inputStream).stream
+
   def apply[F[_]: Async]: Stream[F, Key] =
-    val inputStream: Stream[F, Char] =
-      fs2.io.stdinUtf8(16).flatMap(s => Stream.emits(s.toList))
+    fs2.io
+      .stdinUtf8(32)
+      .through(stringToCharPipe)
+      .through(toKeyPipe)
 
-    mapRoot(inputStream.pull.uncons1).stream
-
-  private def mapRoot[F[_]: Async](
-      pull: Pull[F, Nothing, Option[(Char, Stream[F, Char])]]
+  private def toKeyPull[F[_]: Async](
+      stream: Stream[F, Char]
   ): Pull[F, Key, Nothing] = {
-    pull.flatMap {
+    stream.pull.uncons1.flatMap {
       case None =>
         Pull.raiseError(
           new RuntimeException("Unexpected termination of stdin.")
         )
       case Some((c, rest)) =>
         KeyMappings.default.getOrElse(c, Key(c)) match
-          case k: Key          => Pull.output1(k) >> mapRoot(rest.pull.uncons1)
-          case ks: KeySequence => mapKeySequence(c, ks, rest)
+          case k: Key          => Pull.output1(k) >> toKeyPull(rest)
+          case ks: KeySequence => readKeySequence(c, ks, rest)
     }
   }
 
-  private def mapKeySequence[F[_]: Async](
+  private def readKeySequence[F[_]: Async](
       h: Char,
       ks: KeySequence,
       rest: Stream[F, Char]
   ): Pull[F, Key, Nothing] = {
+    def currentPull: Pull[F, Nothing, Instant] =
+      Pull.eval(Clock[F].realTimeInstant)
     def timeoutPull: Pull[F, Nothing, Instant] =
-      Pull.eval(Clock[F].realTimeInstant).map(_.plusMillis(100))
+      currentPull.map(_.plusMillis(100))
 
     def go(
         sequence: String,
@@ -58,13 +67,10 @@ object KeyStream:
         stream: Stream[F, Char],
         timeoutAfter: Instant
     ): Pull[F, Key, Nothing] = {
-      Pull
-        .eval(Clock[F].realTimeInstant)
+      currentPull
         .flatMap(now => {
-          val expired = now.isAfter(timeoutAfter)
-
-          if expired then
-            Pull.output(Chunk.from(keys)) >> mapRoot(stream.pull.uncons1)
+          if now.isAfter(timeoutAfter) then
+            Pull.output(Chunk.from(keys)) >> toKeyPull(stream)
           else {
             stream.pull.uncons1.flatMap {
               case None =>
@@ -76,20 +82,19 @@ object KeyStream:
                 val nextKey = KeyMappings.default.getOrElse(c, Key(c))
 
                 nextKey match {
-                  case ks: KeySequence =>
-                    Pull.output(Chunk.from(keys)) >>
-                      timeoutPull
-                        .flatMap(ta => go(c.toString, List(ks.root), s, ta))
+                  case newKs: KeySequence =>
+                    Pull
+                      .output(Chunk.from(keys)) >> readKeySequence(c, newKs, s)
                   case k: Key =>
                     ks.isKeySequence(newSeq) match
                       case IsKeySequence.No =>
-                        Pull.output(Chunk.from(keys.appended(k))) >> mapRoot(
-                          s.pull.uncons1
+                        Pull.output(Chunk.from(keys.appended(k))) >> toKeyPull(
+                          s
                         )
                       case IsKeySequence.Maybe =>
                         go(newSeq, keys.appended(k), s, timeoutAfter)
                       case IsKeySequence.Yes(key) =>
-                        Pull.output1(key) >> mapRoot(s.pull.uncons1)
+                        Pull.output1(key) >> toKeyPull(s)
                 }
             }
           }
