@@ -20,4 +20,6 @@ import cats.effect.{IO, IOApp}
 import cats.effect.std.Console
 
 object TestApp extends IOApp.Simple:
-  def run: IO[Unit] = KeyStream[IO].evalTap(Console[IO].println).compile.drain
+  def run: IO[Unit] =
+    val keyStream = KeyStream[IO].evalTap(Console[IO].println).compile.drain
+    Terminal.apply.inRawMode[IO].use(_ => keyStream)
